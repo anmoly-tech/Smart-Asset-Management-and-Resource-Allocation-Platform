@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Smart Asset Management Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen selection:bg-indigo-500 selection:text-white">
+
+    <nav class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+            <div class="h-9 w-9 bg-gradient-to-tr from-indigo-500 to-violet-500 rounded-xl flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/20">S</div>
+            <span class="text-lg font-bold tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">SmartAsset Hub</span>
+        </div>
+        <div class="flex items-center space-x-4">
+            <span class="text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full">Active User: <strong class="text-indigo-400">{{ user.username }}</strong></span>
+            <a href="{% url 'history' %}" class="text-sm font-medium text-slate-400 hover:text-white transition">My Ledger</a>
+            {% if user.is_staff %}
+                <a href="{% url 'admin_workflow' %}" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-lg shadow-indigo-600/20">Admin Workspace</a>
+            {% endif %}
+            <a href="{% url 'logout' %}" class="text-sm font-semibold text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 px-3 py-2 rounded-xl transition">Logout</a>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-6 lg:p-8 space-y-8">
+        
+        {% if messages %}
+            {% for message in messages %}
+                <div class="p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 rounded-2xl text-sm flex items-center shadow-xl animate-pulse">
+                    ✨ {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div class="bg-slate-800/40 border border-slate-800 p-6 rounded-2xl shadow-sm">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ecosystem Assets</p>
+                <p class="text-3xl font-bold text-slate-100 mt-2">{{ total_assets }}</p>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-800 p-6 rounded-2xl shadow-sm">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Currently Deployed Units</p>
+                <p class="text-3xl font-bold text-indigo-400 mt-2">{{ deployed_units }}</p>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-800 p-6 rounded-2xl shadow-sm">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pending Authorizations</p>
+                <p class="text-3xl font-bold text-amber-400 mt-2">{{ pending_approvals }}</p>
+            </div>
+            <div class="bg-slate-800/40 border border-slate-800 p-6 rounded-2xl shadow-sm">
+                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Overdue Alerts</p>
+                <p class="text-3xl font-bold text-rose-400 mt-2">{{ overdue_count }}</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-slate-800/30 border border-slate-800/80 p-6 rounded-2xl">
+                <h3 class="text-sm font-semibold text-slate-400 mb-4 tracking-tight">Ecosystem Resource Volume Breakdown</h3>
+                <div class="h-64 flex items-center justify-center"><canvas id="inventoryChart"></canvas></div>
+            </div>
+            <div class="bg-slate-800/30 border border-slate-800/80 p-6 rounded-2xl">
+                <h3 class="text-sm font-semibold text-slate-400 mb-4 tracking-tight">Platform Asset Inventory Volatility</h3>
+                <div class="h-64 flex items-center justify-center"><canvas id="statusChart"></canvas></div>
+            </div>
+        </div>
+
+        <form method="GET" class="bg-slate-800/20 border border-slate-800 p-4 rounded-2xl flex flex-wrap gap-4 items-center">
+            <div class="flex-1 min-w-[240px]">
+                <input type="text" name="search" placeholder="Search system resources (e.g., DSLR, Lighting)..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <div class="flex-1 min-w-[240px]">
+                <input type="text" name="category" placeholder="Filter by Department Category..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+            </div>
+            <button type="submit" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-medium px-5 py-2.5 rounded-xl text-sm transition">Query Datastore</button>
+        </form>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-[#1e2336] p-6 rounded-2xl shadow-sm border border-gray-700">
+                <h3 class="text-lg font-bold text-gray-100 mb-4 border-b border-gray-700 pb-2"><span class="text-green-400">●</span> Currently Deployed Assets</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-700 text-gray-400 font-bold text-xs uppercase">
+                                <th class="py-2">User</th>
+                                <th class="py-2">Asset</th>
+                                <th class="py-2">Qty</th>
+                                <th class="py-2">Expected Return</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700 text-gray-300">
+                            {% for a in active_handouts %}
+                            <tr class="hover:bg-[#252b40] transition-colors">
+                                <td class="py-3 font-semibold text-indigo-300">{{ a.user.username }}</td>
+                                <td class="py-3">{{ a.asset.name }}</td>
+                                <td class="py-3">{{ a.quantity_requested }}</td>
+                                <td class="py-3">{{ a.end_date|date:"M d, Y" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="py-4 text-center text-gray-500 italic">No assets are currently checked out.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-[#1e2336] p-6 rounded-2xl shadow-sm border border-gray-700">
+                <h3 class="text-lg font-bold text-gray-100 mb-4 border-b border-gray-700 pb-2"><span class="text-blue-400">🗓️</span> Upcoming Reservations</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-gray-700 text-gray-400 font-bold text-xs uppercase">
+                                <th class="py-2">User</th>
+                                <th class="py-2">Asset</th>
+                                <th class="py-2">Qty</th>
+                                <th class="py-2">Reserved Dates</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-700 text-gray-300">
+                            {% for f in future_bookings %}
+                            <tr class="hover:bg-[#252b40] transition-colors">
+                                <td class="py-3 font-semibold text-indigo-300">{{ f.user.username }}</td>
+                                <td class="py-3">{{ f.asset.name }}</td>
+                                <td class="py-3">{{ f.quantity_requested }}</td>
+                                <td class="py-3">
+                                    <span class="bg-gray-700 px-2 py-1 rounded text-xs">{{ f.start_date|date:"M d" }} - {{ f.end_date|date:"M d" }}</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="py-4 text-center text-gray-500 italic">No future reservations scheduled.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+
+        <div>
+            <h2 class="text-xl font-bold tracking-tight text-slate-200 mb-6">Available Inventory Registry</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for asset in assets %}
+                <div class="bg-slate-800/30 border border-slate-800 hover:border-slate-700 rounded-2xl p-6 transition flex flex-col justify-between group">
+                    <div>
+                        <div class="flex justify-between items-start space-x-2">
+                            <h3 class="font-bold text-slate-100 text-lg group-hover:text-indigo-400 transition">{{ asset.name }}</h3>
+                            <span class="text-[10px] font-bold tracking-wider uppercase bg-slate-800 border border-slate-700 text-slate-400 px-2.5 py-1 rounded-md">{{ asset.category }}</span>
+                        </div>
+                        <p class="text-sm text-slate-400 mt-3 line-clamp-2 leading-relaxed">{{ asset.description }}</p>
+                    </div>
+                    <div class="mt-6 pt-4 border-t border-slate-800/80 flex justify-between items-center">
+                        <span class="text-sm font-semibold {% if asset.dynamic_available > 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                            {{ asset.dynamic_available }} Units Available
+                        </span>
+                        {% if asset.dynamic_available > 0 %}
+                            <a href="{% url 'book_asset' asset.id %}" class="bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/20 text-xs font-semibold px-4 py-2 rounded-xl transition">Reserve</a>
+                        {% else %}
+                            <button disabled class="bg-slate-800 text-slate-600 text-xs font-semibold px-4 py-2 rounded-xl cursor-not-allowed border border-transparent">Depleted</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-span-full py-12 text-center border border-dashed border-slate-800 rounded-2xl">
+                    <p class="text-sm text-slate-500">No organizational assets match your structured filter parameters.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter', weight: 500 } } } }
+        };
+
+        new Chart(document.getElementById('inventoryChart').getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Allocated Out', 'Pending Approval', 'Overdue Returns'],
+                datasets: [{
+                    // UPDATED: Now uses deployed_units!
+                    data: [{{ deployed_units }}, {{ pending_approvals }}, {{ overdue_count }}],
+                    backgroundColor: ['#6366f1', '#fbbf24', '#f43f5e'],
+                    borderWidth: 0
+                }]
+            },
+            options: chartOptions
+        });
+
+        new Chart(document.getElementById('statusChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: ['Total Registry'],
+                datasets: [{
+                    label: 'Items Count',
+                    data: [{{ total_assets }}],
+                    backgroundColor: '#10b981',
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                ...chartOptions,
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                    y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

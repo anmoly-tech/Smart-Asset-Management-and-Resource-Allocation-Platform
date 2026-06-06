@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-6xl mx-auto space-y-8">
+        <div class="flex justify-between items-center">
+            <h2 class="text-2xl font-bold text-gray-800">Admin Operational Workspace</h2>
+            <a href="{% url 'dashboard' %}" class="text-indigo-600 hover:underline text-sm font-semibold">&larr; Public Dashboard</a>
+        </div>
+        
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 text-yellow-600">Pending Authorization Requests</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead><tr class="border-b text-gray-400 font-bold text-xs uppercase"><th class="py-2">User</th><th class="py-2">Asset Requested</th><th class="py-2">Qty</th><th class="py-2">Actions</th></tr></thead>
+                    <tbody class="divide-y text-gray-700">
+                        {% for p in pending_requests %}
+                        <tr>
+                            <td class="py-3 font-semibold">{{ p.user.username }}</td>
+                            <td class="py-3">{{ p.asset.name }}</td>
+                            <td class="py-3">{{ p.quantity_requested }}</td>
+                            <td class="py-3 space-x-2">
+                                <a href="{% url 'update_booking' p.id 'approve' %}" class="bg-green-600 text-white px-3 py-1 text-xs rounded hover:bg-green-700">Approve</a>
+                                <a href="{% url 'update_booking' p.id 'reject' %}" class="bg-red-500 text-white px-3 py-1 text-xs rounded hover:bg-red-600">Reject</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="py-4 text-center text-gray-400">No active pending operations.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 text-green-600">Active Handed-Out Materials</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead><tr class="border-b text-gray-400 font-bold text-xs uppercase"><th class="py-2">User</th><th class="py-2">Asset Item</th><th class="py-2">Qty</th><th class="py-2">Return Status</th><th class="py-2">Action</th></tr></thead>
+                    <tbody class="divide-y text-gray-700">
+                        {% for a in active_handouts %}
+                        <tr>
+                            <td class="py-3 font-semibold">{{ a.user.username }}</td>
+                            <td class="py-3">{{ a.asset.name }}</td>
+                            <td class="py-3">{{ a.quantity_requested }}</td>
+                            <td class="py-3">
+                                {% if a.is_overdue %}
+                                    <span class="text-red-600 font-bold uppercase text-xs">Overdue Notice</span>
+                                {% else %}
+                                    <span class="text-green-600 text-xs font-semibold">In Safe Window</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3">
+                                <a href="{% url 'update_booking' a.id 'return' %}" class="bg-indigo-600 text-white px-3 py-1 text-xs rounded hover:bg-indigo-700">Mark Returned</a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="py-4 text-center text-gray-400">No resources currently deployed in the wild.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2 text-blue-600">Future Approved Bookings (Still in Vault)</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead><tr class="border-b text-gray-400 font-bold text-xs uppercase"><th class="py-2">User</th><th class="py-2">Asset Item</th><th class="py-2">Qty</th><th class="py-2">Scheduled Dates</th><th class="py-2">Action</th></tr></thead>
+                    <tbody class="divide-y text-gray-700">
+                        {% for f in future_bookings %}
+                        <tr>
+                            <td class="py-3 font-semibold">{{ f.user.username }}</td>
+                            <td class="py-3">{{ f.asset.name }}</td>
+                            <td class="py-3">{{ f.quantity_requested }}</td>
+                            <td class="py-3">{{ f.start_date|date:"M d" }} to {{ f.end_date|date:"M d" }}</td>
+                            <td class="py-3">
+                                <span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold">Waiting for Start Date</span>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="py-4 text-center text-gray-400">No future bookings scheduled.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

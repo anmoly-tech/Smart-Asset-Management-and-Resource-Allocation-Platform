@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My History</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 p-6">
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-2xl shadow-sm border">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-bold text-gray-800">My Borrowing Track Ledger</h2>
+            <a href="{% url 'dashboard' %}" class="text-indigo-600 hover:underline text-sm font-semibold">&larr; Return to Dashboard</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="border-b text-xs uppercase font-bold text-gray-400">
+                        <th class="py-3">Asset</th>
+                        <th class="py-3">Units</th>
+                        <th class="py-3">Duration</th>
+                        <th class="py-3">Workflow State</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y text-sm text-gray-700">
+                    {% for b in bookings %}
+                    <tr>
+                        <td class="py-3.5 font-semibold text-gray-900">{{ b.asset.name }}</td>
+                        <td class="py-3.5">{{ b.quantity_requested }}</td>
+                        <td class="py-3.5">{{ b.start_date }} to {{ b.end_date }}</td>
+                        <td class="py-3.5">
+                            {% if b.status == 'Approved' and b.is_overdue %}
+                                <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-700">Overdue</span>
+                            {% elif b.status == 'Approved' %}
+                                <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">Approved</span>
+                            {% elif b.status == 'Pending' %}
+                                <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-700">Pending</span>
+                            {% else %}
+                                <span class="px-2.5 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-600">{{ b.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="py-6 text-center text-gray-400">No submission statements recorded yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
