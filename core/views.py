@@ -7,7 +7,18 @@ from django.utils import timezone
 from datetime import date
 from django.db.models import Sum
 from .models import Asset, Booking, Notification, MaintenanceLog
+from datetime import timedelta
+from django.contrib.auth.models import User
 import json
+
+from django.contrib.auth.decorators import user_passes_test
+
+@login_required(login_url='login')
+@user_passes_test(lambda u: u.is_staff, login_url='dashboard')
+def admin_clear_history(request):
+    Booking.objects.filter(status__in=['Returned', 'Rejected', 'Canceled']).delete()
+    return redirect('dashboard')
+
 def signup_view(request):
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
@@ -39,67 +50,84 @@ def logout_view(request):
     return redirect('login')
 
 
-@login_required
+@login_required(login_url='login')
 def dashboard(request):
-    assets = Asset.objects.all()
     today = timezone.now().date()
-    
-    # --- 1. TOP CARDS & TABLE DATA (The missing numbers!) ---
+    assets = Asset.objects.all()
+
+    # --- NOTIFICATION BUG FIX ---
+    # Filter only unread notifications if your model uses 'is_read', otherwise fallback
+    has_unread = False
+    if hasattr(request.user, 'notifications'):
+        try:
+            has_unread = request.user.notifications.filter(is_read=False).exists()
+        except:
+            has_unread = request.user.notifications.all().exists()
+
+    # --- 1. REGULAR USER VIEW (Last 5 Days Filter) ---
+    if not request.user.is_staff:
+        # Calculates date threshold for the past 5 days
+        five_days_ago = today - timedelta(days=5)
+        
+        # Only pull bookings active or completed within the last 5 days
+        my_bookings = Booking.objects.filter(
+            user=request.user,
+            end_date__gte=five_days_ago
+        ).order_by('-start_date')
+        
+        context = {
+            'assets': assets,
+            'my_bookings': my_bookings,
+            'is_admin': False,
+            'has_unread': has_unread, # Pass fix flag to template
+        }
+        return render(request, 'core/dashboard.html', context)
+
+    # --- 2. ADMIN VIEW ---
     total_assets = Asset.objects.count()
-    
-    deployed_units = Booking.objects.filter(
-        status='Approved', start_date__lte=today, end_date__gte=today
-    ).aggregate(total=Sum('quantity_requested'))['total'] or 0
-    
+    deployed_units = Booking.objects.filter(status='Approved', start_date__lte=today, end_date__gte=today).aggregate(total=Sum('quantity_requested'))['total'] or 0
     pending_approvals = Booking.objects.filter(status='Pending').count()
     overdue_count = Booking.objects.filter(status='Approved', end_date__lt=today).count()
-    
     active_handouts = Booking.objects.filter(status='Approved', start_date__lte=today, end_date__gte=today)
     future_bookings = Booking.objects.filter(status='Approved', start_date__gt=today)
 
-    # --- 2. STACKED BAR CHART DATA ---
-    chart_labels = []
-    chart_green = []  
-    chart_red = []    
-    chart_yellow = [] 
-    
+    chart_labels, chart_green, chart_red, chart_yellow = [], [], [], []
     for asset in assets:
         chart_labels.append(asset.name)
+        active = Booking.objects.filter(asset=asset, status='Approved', start_date__lte=today, end_date__gte=today).aggregate(total=Sum('quantity_requested'))['total'] or 0
+        future = Booking.objects.filter(asset=asset, status='Approved', start_date__gt=today).aggregate(total=Sum('quantity_requested'))['total'] or 0
+        available = max(0, asset.quantity_available - active)
+        chart_red.append(active)
+        chart_yellow.append(future)
+        chart_green.append(available)
         
-        active_bookings = Booking.objects.filter(
-            asset=asset, status='Approved', start_date__lte=today, end_date__gte=today
-        ).aggregate(total=Sum('quantity_requested'))['total'] or 0
-        
-        future_bookings_count = Booking.objects.filter(
-            asset=asset, status='Approved', start_date__gt=today
-        ).aggregate(total=Sum('quantity_requested'))['total'] or 0
-        
-        available_units = asset.quantity_available - active_bookings
-        if available_units < 0: 
-            available_units = 0 
-            
-        chart_red.append(active_bookings)
-        chart_yellow.append(future_bookings_count)
-        chart_green.append(available_units)
-        
-    # --- 3. MERGED CONTEXT ---
     context = {
         'assets': assets,
-        # Restored original variables
+        'is_admin': True,
+        'has_unread': has_unread, 
         'total_assets': total_assets,
         'deployed_units': deployed_units,
         'pending_approvals': pending_approvals,
         'overdue_count': overdue_count,
         'active_handouts': active_handouts,
         'future_bookings': future_bookings,
-        # New chart variables
         'chart_labels': json.dumps(chart_labels),
         'chart_red': json.dumps(chart_red),
         'chart_yellow': json.dumps(chart_yellow),
         'chart_green': json.dumps(chart_green),
     }
-    
     return render(request, 'core/dashboard.html', context)
+
+@login_required(login_url='login')
+def clear_notifications(request):
+    if hasattr(request.user, 'notifications'):
+        try:
+            # Tries to mark them read so they stop twinkling
+            request.user.notifications.filter(is_read=False).update(is_read=True)
+        except:
+            # Fallback: Clears out notification history data if field structures differ
+            request.user.notifications.all().delete()
+    return redirect('dashboard')
 
 @login_required
 def book_asset(request, asset_id):
@@ -136,13 +164,28 @@ def book_asset(request, asset_id):
                 'unreserved_count': unreserved_count
             })
             
-        Booking.objects.create(
-            user=request.user, asset=asset, quantity_requested=quantity,
-            start_date=start_date, end_date=end_date
+        # 1. Capture the newly created booking instance into a variable named 'booking'
+        booking = Booking.objects.create(
+            user=request.user, 
+            asset=asset, 
+            quantity_requested=quantity,
+            start_date=start_date, 
+            end_date=end_date
         )
-        messages.success(request, "Booking requested successfully!")
-        return redirect('history')
         
+        # 2. Trigger notifications to admins immediately upon successful booking creation
+        admin_users = User.objects.filter(is_staff=True)
+        for admin in admin_users:
+            Notification.objects.create(
+                user=admin,
+                message=f"New Request: {request.user.username} has requested {booking.quantity_requested}x {booking.asset.name}.",
+                is_read=False
+            )
+            
+        messages.success(request, "Booking requested successfully!")
+        return redirect('history')  # Redirect user to history timeline page
+        
+    # Standard GET request renders the template form normally
     return render(request, 'core/book_asset.html', {
         'asset': asset, 
         'unreserved_count': unreserved_count

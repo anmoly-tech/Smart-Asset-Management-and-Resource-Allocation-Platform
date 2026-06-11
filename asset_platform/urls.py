@@ -15,4 +15,6 @@ urlpatterns = [
     path('asset/<int:asset_id>/check/', views.qr_asset_action, name='qr_asset_action'),
     path('notifications/', views.notification_center, name='notification_center'),
     path('asset/<int:asset_id>/health/', views.report_asset_health, name='report_asset_health'),
+    path('notifications/clear/', views.clear_notifications, name='clear_notifications'),
+    path('admin-workspace/purge-history/', views.admin_clear_history, name='admin_clear_history'),
 ]
