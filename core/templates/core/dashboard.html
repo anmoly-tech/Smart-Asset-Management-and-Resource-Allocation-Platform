@@ -16,6 +16,14 @@
         </div>
         <div class="flex items-center space-x-4">
             <span class="text-xs font-medium bg-slate-800 border border-slate-700 text-slate-300 px-3 py-1.5 rounded-full">Active User: <strong class="text-indigo-400">{{ user.username }}</strong></span>
+            
+            <a href="{% url 'notification_center' %}" class="relative text-sm font-medium text-slate-400 hover:text-white transition px-2 py-1">
+                Inbox Alerts
+                {% if user.notifications.all %}
+                    <span class="absolute top-1 -right-1.5 h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+                {% endif %}
+            </a>
+
             <a href="{% url 'history' %}" class="text-sm font-medium text-slate-400 hover:text-white transition">My Ledger</a>
             {% if user.is_staff %}
                 <a href="{% url 'admin_workflow' %}" class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition shadow-lg shadow-indigo-600/20">Admin Workspace</a>
@@ -24,16 +32,18 @@
         </div>
     </nav>
 
+    {% if messages %}
+    <div class="max-w-7xl mx-auto mt-4 px-4 space-y-2">
+        {% for message in messages %}
+        <div class="p-4 rounded-lg text-sm font-medium border transition-all duration-300 {% if message.tags == 'error' %}bg-red-50 text-red-800 border-red-200 animate-pulse{% elif message.tags == 'success' %}bg-green-50 text-green-800 border-green-200{% else %}bg-blue-50 text-blue-800 border-blue-200{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <main class="max-w-7xl mx-auto p-6 lg:p-8 space-y-8">
         
-        {% if messages %}
-            {% for message in messages %}
-                <div class="p-4 bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 rounded-2xl text-sm flex items-center shadow-xl animate-pulse">
-                    ✨ {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div class="bg-slate-800/40 border border-slate-800 p-6 rounded-2xl shadow-sm">
                 <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Ecosystem Assets</p>
@@ -75,7 +85,6 @@
         </form>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
             <div class="bg-[#1e2336] p-6 rounded-2xl shadow-sm border border-gray-700">
                 <h3 class="text-lg font-bold text-gray-100 mb-4 border-b border-gray-700 pb-2"><span class="text-green-400">●</span> Currently Deployed Assets</h3>
                 <div class="overflow-x-auto">
@@ -133,35 +142,72 @@
                     </table>
                 </div>
             </div>
-
         </div>
 
         <div>
             <h2 class="text-xl font-bold tracking-tight text-slate-200 mb-6">Available Inventory Registry</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {% for asset in assets %}
-                <div class="bg-slate-800/30 border border-slate-800 hover:border-slate-700 rounded-2xl p-6 transition flex flex-col justify-between group">
-                    <div>
-                        <div class="flex justify-between items-start space-x-2">
-                            <h3 class="font-bold text-slate-100 text-lg group-hover:text-indigo-400 transition">{{ asset.name }}</h3>
-                            <span class="text-[10px] font-bold tracking-wider uppercase bg-slate-800 border border-slate-700 text-slate-400 px-2.5 py-1 rounded-md">{{ asset.category }}</span>
+                <div class="bg-[#111827] text-white p-6 rounded-2xl border border-gray-800 shadow-xl flex flex-col justify-between min-h-[280px]">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-slate-200">{{ asset.name }}</h3>
+                            <span class="text-xs font-semibold text-blue-400 uppercase tracking-wider bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 mt-1 inline-block">
+                                {{ asset.category }}
+                            </span>
                         </div>
-                        <p class="text-sm text-slate-400 mt-3 line-clamp-2 leading-relaxed">{{ asset.description }}</p>
+                        <div class="flex flex-col items-end gap-1.5">
+                            {% if asset.status == 'Available' %}
+                                <span class="text-xs font-medium bg-green-500/10 text-green-400 px-2.5 py-1 rounded-full border border-green-500/20">🟢 Ready</span>
+                            {% elif asset.status == 'Maintenance' %}
+                                <span class="text-xs font-medium bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded-full border border-amber-500/20">🔧 In Repair</span>
+                            {% else %}
+                                <span class="text-xs font-medium bg-red-500/10 text-red-400 px-2.5 py-1 rounded-full border border-red-500/20">📦 Depleted</span>
+                            {% endif %}
+                        </div>
                     </div>
-                    <div class="mt-6 pt-4 border-t border-slate-800/80 flex justify-between items-center">
-                        <span class="text-sm font-semibold {% if asset.dynamic_available > 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
-                            {{ asset.dynamic_available }} Units Available
-                        </span>
-                        {% if asset.dynamic_available > 0 %}
-                            <a href="{% url 'book_asset' asset.id %}" class="bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/20 text-xs font-semibold px-4 py-2 rounded-xl transition">Reserve</a>
-                        {% else %}
-                            <button disabled class="bg-slate-800 text-slate-600 text-xs font-semibold px-4 py-2 rounded-xl cursor-not-allowed border border-transparent">Depleted</button>
-                        {% endif %}
+
+                    <div class="bg-[#1f2937] p-4 rounded-xl flex justify-between items-center my-2 border border-gray-700/50">
+                        <div>
+                            <p class="text-xs font-medium text-gray-400">Device Identity Tag</p>
+                            <p class="text-sm font-bold tracking-mono text-gray-300">TAG-00{{ asset.id }}</p>
+                        </div>
+                        <img src="{{ asset.qr_code_base64 }}" alt="QR Link" class="w-12 h-12 rounded border border-white p-0.5 bg-white">
                     </div>
-                </div>
-                {% empty %}
-                <div class="col-span-full py-12 text-center border border-dashed border-slate-800 rounded-2xl">
-                    <p class="text-sm text-slate-500">No organizational assets match your structured filter parameters.</p>
+
+                    <hr class="border-gray-800/80 my-3">
+
+                    <div class="flex justify-between items-center mt-auto">
+                        <div>
+                            {% if asset.quantity_available > 0 %}
+                                <p class="text-sm font-semibold text-green-400">
+                                    {{ asset.quantity_available }} Units Available
+                                </p>
+                                <p class="text-[11px] text-gray-500">Total Pool: {{ asset.total_quantity }}</p>
+                            {% else %}
+                                <p class="text-sm font-semibold text-red-400">Under Maintenance</p>
+                                <p class="text-[11px] text-gray-500">0 Units Functional</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="flex gap-2">
+                            {% if user.is_staff %}
+                                <a href="{% url 'report_asset_health' asset.id %}" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 font-medium rounded-lg transition border border-gray-700">
+                                    Log Status
+                                </a>
+                            {% endif %}
+
+                            {% if asset.quantity_available > 0 %}
+                                <a href="{% url 'book_asset' asset.id %}" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-xs font-semibold rounded-lg text-white transition shadow-xs">
+                                    Book Now
+                                </a>
+                            {% else %}
+                                <button disabled class="px-4 py-1.5 bg-gray-800 text-gray-600 text-xs font-semibold rounded-lg cursor-not-allowed border border-gray-800">
+                                    Unavailable
+                                </button>
+                            {% endif %}
+                        </div>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -176,12 +222,12 @@
             plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter', weight: 500 } } } }
         };
 
+        // Donut Chart (Kept identical)
         new Chart(document.getElementById('inventoryChart').getContext('2d'), {
             type: 'doughnut',
             data: {
                 labels: ['Allocated Out', 'Pending Approval', 'Overdue Returns'],
                 datasets: [{
-                    // UPDATED: Now uses deployed_units!
                     data: [{{ deployed_units }}, {{ pending_approvals }}, {{ overdue_count }}],
                     backgroundColor: ['#6366f1', '#fbbf24', '#f43f5e'],
                     borderWidth: 0
@@ -190,22 +236,55 @@
             options: chartOptions
         });
 
+        // NEW Stacked Bar Chart for Asset Volatility
+        const labels = JSON.parse('{{ chart_labels|safe|default:"[]" }}');
+        const redData = JSON.parse('{{ chart_red|safe|default:"[]" }}');
+        const yellowData = JSON.parse('{{ chart_yellow|safe|default:"[]" }}');
+        const greenData = JSON.parse('{{ chart_green|safe|default:"[]" }}');
+
         new Chart(document.getElementById('statusChart').getContext('2d'), {
             type: 'bar',
             data: {
-                labels: ['Total Registry'],
-                datasets: [{
-                    label: 'Items Count',
-                    data: [{{ total_assets }}],
-                    backgroundColor: '#10b981',
-                    borderRadius: 8
-                }]
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Handed Out (Active)',
+                        data: redData,
+                        backgroundColor: 'rgba(244, 63, 94, 0.9)', // Rose-500 to match your theme
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Future Bookings',
+                        data: yellowData,
+                        backgroundColor: 'rgba(251, 191, 36, 0.9)', // Amber-400
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Available (On Shelf)',
+                        data: greenData,
+                        backgroundColor: 'rgba(16, 185, 129, 0.9)', // Emerald-500
+                        borderRadius: 4
+                    }
+                ]
             },
             options: {
                 ...chartOptions,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8' } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' }, beginAtZero: true }
+                    x: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        grid: { color: '#1e293b' },
+                        ticks: { color: '#94a3b8', stepSize: 1 } // Only whole numbers for inventory
+                    }
                 }
             }
         });

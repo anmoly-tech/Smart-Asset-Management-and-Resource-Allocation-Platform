@@ -12,4 +12,7 @@ urlpatterns = [
     path('history/', views.borrowing_history, name='history'),
     path('manage-requests/', views.admin_workflow, name='admin_workflow'),
     path('booking-action/<int:booking_id>/<str:action>/', views.update_booking_status, name='update_booking'),
+    path('asset/<int:asset_id>/check/', views.qr_asset_action, name='qr_asset_action'),
+    path('notifications/', views.notification_center, name='notification_center'),
+    path('asset/<int:asset_id>/health/', views.report_asset_health, name='report_asset_health'),
 ]

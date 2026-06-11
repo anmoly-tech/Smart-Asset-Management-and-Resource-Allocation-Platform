@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Asset Health - Admin Panel</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-gray-50 font-sans antialiased text-gray-900">
+
+    <div class="max-w-2xl mx-auto my-12 px-4">
+        <div class="mb-6">
+            <a href="{% url 'dashboard' %}" class="text-sm font-medium text-blue-600 hover:text-blue-800 transition flex items-center gap-1">
+                ← Back to Dashboard
+            </a>
+        </div>
+
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for message in messages %}
+            <div class="p-4 rounded-lg text-sm font-medium {% if message.tags == 'error' %}bg-red-50 text-red-800 border border-red-200{% else %}bg-green-50 text-green-800 border border-green-200{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="bg-white rounded-xl shadow-xs border border-gray-200 overflow-hidden">
+            <div class="bg-gray-900 px-6 py-4 text-white">
+                <span class="text-xs font-semibold uppercase tracking-wider text-amber-400 bg-amber-400/10 px-2 py-1 rounded border border-amber-400/20">
+                    Administrative Tool
+                </span>
+                <h1 class="text-xl font-bold mt-2">Log Incident & Asset Health Status</h1>
+                <p class="text-xs text-gray-400 mt-1">Target Asset: <span class="text-white font-medium">{{ asset.name }}</span></p>
+            </div>
+
+            <form method="POST" action="" class="p-6 space-y-6">
+                {% csrf_token %}
+
+                <div class="grid grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg border border-gray-200 text-sm">
+                    <div>
+                        <span class="block text-gray-500 text-xs uppercase font-medium">Total Capacity</span>
+                        <strong class="text-lg text-gray-800">{{ asset.total_quantity }} Units</strong>
+                    </div>
+                    <div>
+                        <span class="block text-gray-500 text-xs uppercase font-medium">Currently Functional</span>
+                        <strong class="text-lg text-blue-600">{{ asset.quantity_available }} Functional</strong>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="health_status" class="block text-sm font-semibold text-gray-700 mb-1">
+                        Global Asset Overall Status Flag
+                    </label>
+                    <select 
+                        id="health_status" 
+                        name="health_status" 
+                        required
+                        onchange="toggleDamageInput()"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-2xs bg-white text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                        <option value="Available" {% if asset.status == 'Available' %}selected{% endif %}>Available (Operational)</option>
+                        <option value="Maintenance" {% if asset.status == 'Maintenance' %}selected{% endif %}>Maintenance (Move Units to Repair)</option>
+                        <option value="Out of Stock" {% if asset.status == 'Out of Stock' %}selected{% endif %}>Out of Stock (Manual Depletion Label)</option>
+                    </select>
+                </div>
+
+                <div id="damage_input_container">
+                    <label for="damaged_units" class="block text-sm font-semibold text-gray-700 mb-1">
+                        Number of Units Moving to Maintenance
+                    </label>
+                    <input 
+                        type="number" 
+                        id="damaged_units" 
+                        name="damaged_units" 
+                        min="0" 
+                        max="{{ asset.quantity_available }}" 
+                        value="0" 
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                    >
+                </div>
+
+                <div>
+                    <label for="description" class="block text-sm font-semibold text-gray-700 mb-1">
+                        Issue Description & Audit Log Notes
+                    </label>
+                    <textarea 
+                        id="description" 
+                        name="description" 
+                        rows="4" 
+                        placeholder="Provide details for this logging activity..." 
+                        required
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none focus:ring-2 focus:ring-blue-500"
+                    ></textarea>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                    <a href="{% url 'dashboard' %}" class="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition">
+                        Cancel
+                    </a>
+                    <button type="submit" class="px-4 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition">
+                        Commit Log Entry
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function toggleDamageInput() {
+            const statusDropdown = document.getElementById('health_status');
+            const damageContainer = document.getElementById('damage_input_container');
+            const damageInput = document.getElementById('damaged_units');
+
+            if (statusDropdown.value === 'Out of Stock') {
+                damageContainer.style.display = 'none';
+                damageInput.value = 0; // Reset count automatically
+                damageInput.removeAttribute('required');
+            } else {
+                damageContainer.style.display = 'block';
+                damageInput.setAttribute('required', 'required');
+            }
+        }
+        
+        // Run once on initial loading to handle default states perfectly
+        window.addEventListener('DOMContentLoaded', toggleDamageInput);
+    </script>
+</body>
+</html>
