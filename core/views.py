@@ -10,8 +10,23 @@ from .models import Asset, Booking, Notification, MaintenanceLog
 from datetime import timedelta
 from django.contrib.auth.models import User
 import json
-
 from django.contrib.auth.decorators import user_passes_test
+from datetime import datetime, timedelta
+from django.contrib.auth import get_user_model
+
+@login_required
+def read_single_notification(request, notification_id):
+    """Removes the red dot from a single notification by marking it read"""
+    notification = get_object_or_404(Notification, id=notification_id, user=request.user)
+    notification.is_read = True
+    notification.save()
+    return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
+
+@login_required
+def clear_all_notifications(request):
+    """Wipes out the entire notification history like a phone's 'Clear All' button"""
+    Notification.objects.filter(user=request.user).delete()
+    return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
 
 @login_required(login_url='login')
 @user_passes_test(lambda u: u.is_staff, login_url='dashboard')
@@ -49,57 +64,78 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
-
 @login_required(login_url='login')
 def dashboard(request):
     today = timezone.now().date()
     assets = Asset.objects.all()
 
-    # --- NOTIFICATION BUG FIX ---
-    # Filter only unread notifications if your model uses 'is_read', otherwise fallback
+    for asset in assets:
+        # 1. Units actively in users' hands TODAY
+        active_count = Booking.objects.filter(
+            asset=asset,
+            status='Approved',
+            start_date__lte=today,
+            end_date__gte=today
+        ).aggregate(total=Sum('quantity_requested'))['total'] or 0
+        
+        # 2. Maintenance is simply: Total Capacity minus Functional Pool
+        asset.units_in_maintenance = asset.total_quantity - asset.quantity_available
+        
+        # 3. Live availability (On the shelf right now): Functional minus Active Handouts
+        asset.live_available = asset.quantity_available - active_count
+        
+        # Safety catch so it never shows negative
+        if asset.live_available < 0: 
+            asset.live_available = 0
+
     has_unread = False
     if hasattr(request.user, 'notifications'):
-        try:
-            has_unread = request.user.notifications.filter(is_read=False).exists()
-        except:
-            has_unread = request.user.notifications.all().exists()
+        has_unread = request.user.notifications.filter(is_read=False).exists()
 
-    # --- 1. REGULAR USER VIEW (Last 5 Days Filter) ---
+    # --- REGULAR USER DASHBOARD ---
     if not request.user.is_staff:
-        # Calculates date threshold for the past 5 days
         five_days_ago = today - timedelta(days=5)
-        
-        # Only pull bookings active or completed within the last 5 days
-        my_bookings = Booking.objects.filter(
-            user=request.user,
-            end_date__gte=five_days_ago
-        ).order_by('-start_date')
-        
-        context = {
+        my_bookings = Booking.objects.filter(user=request.user, end_date__gte=five_days_ago).order_by('-start_date')
+        return render(request, 'core/dashboard.html', {
             'assets': assets,
             'my_bookings': my_bookings,
             'is_admin': False,
-            'has_unread': has_unread, # Pass fix flag to template
-        }
-        return render(request, 'core/dashboard.html', context)
+            'has_unread': has_unread,
+        })
 
-    # --- 2. ADMIN VIEW ---
+    # --- ADMIN DASHBOARD ---
     total_assets = Asset.objects.count()
     deployed_units = Booking.objects.filter(status='Approved', start_date__lte=today, end_date__gte=today).aggregate(total=Sum('quantity_requested'))['total'] or 0
     pending_approvals = Booking.objects.filter(status='Pending').count()
     overdue_count = Booking.objects.filter(status='Approved', end_date__lt=today).count()
     active_handouts = Booking.objects.filter(status='Approved', start_date__lte=today, end_date__gte=today)
-    future_bookings = Booking.objects.filter(status='Approved', start_date__gt=today)
+    future_bookings = Booking.objects.filter(
+    status='Approved', 
+    start_date__gt=today
+).order_by('asset__name', 'start_date')
 
+    # --- FIXED CHART MATH ---
     chart_labels, chart_green, chart_red, chart_yellow = [], [], [], []
     for asset in assets:
         chart_labels.append(asset.name)
-        active = Booking.objects.filter(asset=asset, status='Approved', start_date__lte=today, end_date__gte=today).aggregate(total=Sum('quantity_requested'))['total'] or 0
-        future = Booking.objects.filter(asset=asset, status='Approved', start_date__gt=today).aggregate(total=Sum('quantity_requested'))['total'] or 0
-        available = max(0, asset.quantity_available - active)
+        
+        # Active today
+        active = Booking.objects.filter(
+            asset=asset, status='Approved', start_date__lte=today, end_date__gte=today
+        ).aggregate(total=Sum('quantity_requested'))['total'] or 0
+        
+        # Future bookings
+        future = Booking.objects.filter(
+            asset=asset, status='Approved', start_date__gt=today
+        ).aggregate(total=Sum('quantity_requested'))['total'] or 0
+        
+        # Correctly calculate green (available) bar so it doesn't duplicate total units
+        live_shelf = asset.quantity_available - active
+        if live_shelf < 0: live_shelf = 0
+        
         chart_red.append(active)
         chart_yellow.append(future)
-        chart_green.append(available)
+        chart_green.append(live_shelf) 
         
     context = {
         'assets': assets,
@@ -129,67 +165,96 @@ def clear_notifications(request):
             request.user.notifications.all().delete()
     return redirect('dashboard')
 
-@login_required
+@login_required(login_url='login')
 def book_asset(request, asset_id):
     asset = get_object_or_404(Asset, id=asset_id)
-    today = timezone.localdate()
     
-    today_bookings = Booking.objects.filter(
-        asset=asset, 
-        status='Approved',
-        start_date__lte=today,
-        end_date__gte=today
-    )
-    taken_today = today_bookings.aggregate(Sum('quantity_requested'))['quantity_requested__sum'] or 0
-    unreserved_count = asset.quantity_available - taken_today
-
+    # === POST REQUEST (When user clicks Submit) ===
     if request.method == 'POST':
-        quantity = int(request.POST.get('quantity', 1))
-        start_date = request.POST.get('start_date')
-        end_date = request.POST.get('end_date')
-
-        total_capacity = asset.quantity_available
+        requested_qty = int(request.POST.get('quantity', 1))
+        start_date_str = request.POST.get('start_date')
+        end_date_str = request.POST.get('end_date')
+        
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        
         overlapping_bookings = Booking.objects.filter(
             asset=asset,
-            status='Approved',
-            start_date__lte=end_date,  
-            end_date__gte=start_date   
-        )
-        taken_units = overlapping_bookings.aggregate(Sum('quantity_requested'))['quantity_requested__sum'] or 0
-
-        if quantity > (total_capacity - taken_units):
-            messages.error(request, f"Date Conflict: Only {total_capacity - taken_units} units are available between those specific dates.")
-            return render(request, 'core/book_asset.html', {
-                'asset': asset, 
-                'unreserved_count': unreserved_count
-            })
-            
-        # 1. Capture the newly created booking instance into a variable named 'booking'
-        booking = Booking.objects.create(
-            user=request.user, 
-            asset=asset, 
-            quantity_requested=quantity,
-            start_date=start_date, 
-            end_date=end_date
+            status__in=['Approved', 'Pending'],
+            start_date__lte=end_date,
+            end_date__gte=start_date
         )
         
-        # 2. Trigger notifications to admins immediately upon successful booking creation
+        max_used_in_range = 0
+        current_day = start_date
+        while current_day <= end_date:
+            daily_used = sum(
+                b.quantity_requested for b in overlapping_bookings 
+                if b.start_date <= current_day <= b.end_date
+            )
+            if daily_used > max_used_in_range:
+                max_used_in_range = daily_used
+            current_day += timedelta(days=1)
+            
+        available_for_dates = asset.quantity_available - max_used_in_range
+        if available_for_dates < 0:
+            available_for_dates = 0
+
+        if requested_qty > available_for_dates:
+            messages.error(
+                request, 
+                f"Date Conflict: Only {available_for_dates} units are available to cover the entire duration of {start_date_str} to {end_date_str}."
+            )
+            return redirect('book_asset', asset_id=asset.id)
+            
+        Booking.objects.create(
+            user=request.user,
+            asset=asset,
+            quantity_requested=requested_qty,
+            start_date=start_date,
+            end_date=end_date,
+            status='Pending'
+        )
+        
+        User = get_user_model()
         admin_users = User.objects.filter(is_staff=True)
         for admin in admin_users:
             Notification.objects.create(
                 user=admin,
-                message=f"New Request: {request.user.username} has requested {booking.quantity_requested}x {booking.asset.name}.",
-                is_read=False
+                message=f"New request from {request.user.username}: {requested_qty}x {asset.name} ({start_date_str} to {end_date_str})."
             )
-            
-        messages.success(request, "Booking requested successfully!")
-        return redirect('history')  # Redirect user to history timeline page
         
-    # Standard GET request renders the template form normally
-    return render(request, 'core/book_asset.html', {
-        'asset': asset, 
-        'unreserved_count': unreserved_count
-    })
+        messages.success(request, f"Successfully requested {requested_qty}x {asset.name}. Awaiting admin approval.")
+        return redirect('dashboard')
+
+    # === GET REQUEST (When user first loads the page) ===
+    today = timezone.now().date()
+    
+    # 1. Grab future reservations for the table
+    future_reservations = Booking.objects.filter(
+        asset=asset,
+        status__in=['Approved', 'Pending'],
+        end_date__gte=today
+    ).order_by('start_date')
+
+    # 2. Calculate live shelf availability to show on the form
+    active_count = Booking.objects.filter(
+        asset=asset,
+        status='Approved',
+        start_date__lte=today,
+        end_date__gte=today
+    ).aggregate(total=Sum('quantity_requested'))['total'] or 0
+    
+    live_available = asset.quantity_available - active_count
+    if live_available < 0:
+        live_available = 0
+
+    context = {
+        'asset': asset,
+        'future_reservations': future_reservations,
+        'live_available': live_available
+    }
+    return render(request, 'core/book_asset.html', context)
 
 @login_required
 def borrowing_history(request):
@@ -264,59 +329,38 @@ def notification_center(request):
 # --- CRITICAL UPDATE: ADMIN LOCKDOWN & QUANTITY DEDUCTION MATH ---
 @login_required
 def report_asset_health(request, asset_id):
-    if not request.user.is_staff:
-        messages.error(request, "Access Denied: Only administrators can modify health status metrics.")
-        return redirect('dashboard')
-        
     asset = get_object_or_404(Asset, id=asset_id)
     
+    # Maintenance is just Total minus Functional. Active bookings don't change if a unit is broken.
+    current_maintenance = asset.total_quantity - asset.quantity_available
+    
     if request.method == 'POST':
-        status_update = request.POST.get('health_status')
-        description = request.POST.get('description')
+        to_maintenance = int(request.POST.get('units_to_maintenance', 0))
+        to_functional = int(request.POST.get('units_to_functional', 0))
+        global_status = request.POST.get('health_status')
         
-        # RULE: Out of Stock means no inventory modification/damage deduction is required
-        if status_update == 'Out of Stock':
-            asset.status = 'Out of Stock'
-            asset.save()
-            
-            MaintenanceLog.objects.create(
-                asset=asset,
-                reported_by=request.user,
-                issue_description=f"[Manually set to Out of Stock] {description}",
-                units_damaged=0
-            )
-            messages.success(request, f"📦 {asset.name} updated successfully to Out of Stock layout.")
-            return redirect('dashboard')
-            
-        # Processing Maintenance Damage Math
-        try:
-            damaged_units = int(request.POST.get('damaged_units', 0))
-        except ValueError:
-            damaged_units = 0
-            
-        if damaged_units > asset.quantity_available:
-            messages.error(request, f"Operation Failed: Cannot log {damaged_units} broken units. Only {asset.quantity_available} remain functional.")
-            return render(request, 'core/report_health.html', {'asset': asset})
-        
-        # Log to Database Audit Table
-        MaintenanceLog.objects.create(
-            asset=asset,
-            reported_by=request.user,
-            issue_description=description,
-            units_damaged=damaged_units
-        )
-        
-        # Subtract operational inventory
-        asset.quantity_available -= damaged_units
-        
-        # If units are still left on shelves, keep overall line active ('Available')
-        if asset.quantity_available > 0:
-            asset.status = 'Available'
-        else:
-            asset.status = 'Maintenance'
+        if to_maintenance > 0:
+            if to_maintenance <= asset.quantity_available:
+                asset.quantity_available -= to_maintenance
+            else:
+                messages.error(request, f"Cannot move {to_maintenance} units to maintenance. Only {asset.quantity_available} functional units left.")
+                return redirect('report_asset_health', asset_id=asset.id)
+                
+        if to_functional > 0:
+            if to_functional <= current_maintenance:
+                asset.quantity_available += to_functional
+            else:
+                messages.error(request, f"Cannot restore {to_functional} units. Only {current_maintenance} are in maintenance.")
+                return redirect('report_asset_health', asset_id=asset.id)
+
+        if global_status:
+            asset.status = global_status
             
         asset.save()
-        messages.success(request, f"🔧 Log saved. {asset.quantity_available} remaining units are available for bookings.")
+        messages.success(request, f"Health logs updated for {asset.name}.")
         return redirect('dashboard')
         
-    return render(request, 'core/report_health.html', {'asset': asset})
+    return render(request, 'core/report_health.html', {
+        'asset': asset,
+        'current_maintenance': current_maintenance
+    })

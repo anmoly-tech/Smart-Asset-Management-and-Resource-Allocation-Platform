@@ -9,7 +9,7 @@
     <div class="bg-white p-8 rounded-2xl shadow-md border max-w-md w-full">
         <h2 class="text-xl font-bold text-gray-800 mb-2">Request Allocation: {{ asset.name }}</h2>
         
-        <p class="text-sm text-gray-500 mb-6">Units Available: {{ unreserved_count }} items.</p>
+        <p class="text-muted">Units Available on Shelf: <strong>{{ live_available }}</strong></p>
         
         {% if messages %}
             <div class="mb-4 space-y-2">
@@ -47,6 +47,46 @@
                 <button type="submit" class="bg-indigo-600 text-white font-semibold text-sm px-5 py-2 rounded-lg hover:bg-indigo-700">Submit Request</button>
             </div>
         </form>
+        <hr class="my-4">
+
+<div class="reservation-calendar mt-4">
+    <h4 class="mb-3">Upcoming Calendar for {{ asset.name }}</h4>
+    
+    {% if future_reservations %}
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>Quantity Locked</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for res in future_reservations %}
+                    <tr>
+                        <td>{{ res.quantity_requested }} Unit(s)</td>
+                        <td>{{ res.start_date|date:"M d, Y" }}</td>
+                        <td>{{ res.end_date|date:"M d, Y" }}</td>
+                        <td>
+                            {% if res.status == 'Approved' %}
+                                <span class="badge bg-success">Approved</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Pending</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="alert alert-success" role="alert">
+            No upcoming reservations. All units are currently free!
+        </div>
+    {% endif %}
+</div>
     </div>
 </body>
 </html>
