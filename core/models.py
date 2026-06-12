@@ -28,7 +28,6 @@ class Asset(models.Model):
     def __str__(self):
         return f"{self.name} - {self.category} ({self.quantity_available}/{self.total_quantity} Available)"
 
-    # --- DYNAMIC QR CODE PROPERTY ---
     @property
     def qr_code_base64(self):
         qr_data = f"http://127.0.0.1:8000/asset/{self.id}/check/"
@@ -79,8 +78,6 @@ class Notification(models.Model):
     def __str__(self):
         return f"Notification for {self.user.username} - Read: {self.is_read}"
 
-
-# --- UPDATED: TRACKS REPAIR COUNTS PER LOG ---
 class MaintenanceLog(models.Model):
     asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='maintenance_history')
     reported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
