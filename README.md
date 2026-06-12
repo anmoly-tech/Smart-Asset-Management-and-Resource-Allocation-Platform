@@ -7,6 +7,7 @@
 ## 📋 Table of Contents
 
 - [Features](#-features)
+- [Demo Video](#-demo-video)
 - [Tech Stack](#-tech-stack)
 - [Project Structure](#-project-structure)
 - [Local Setup & Installation](#-local-setup--installation)
