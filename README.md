@@ -33,6 +33,13 @@
 
 ---
 
+## 🎥 Demo Video
+Watch the video below to see the project in action:
+
+[DEMO VIDEO](https://drive.google.com/file/d/1b3kehByEOfYeDF96MHScKfK_bMsNrGYl/view?usp=sharing)
+
+---
+
 ## 🛠 Tech Stack
 
 | Layer | Technology |
