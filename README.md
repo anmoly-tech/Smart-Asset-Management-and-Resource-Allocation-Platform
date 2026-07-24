@@ -100,7 +100,7 @@ ASSET_MANAGEMENT_HUB/
 
 ```bash
 # ── 1. Clone the repository ──────────────────────────────────────────────────
-git clone https://github.com/your-username/asset-platform.git
+git clone https://github.com/anmoly-tech/Smart-Asset-Management-and-Resource-Allocation-Platform.git
 
 
 # ── 2. Create a virtual environment ──────────────────────────────────────────
